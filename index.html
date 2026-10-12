@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="vi" class="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <!-- PWA Ready Meta Tags -->
+    <meta name="theme-color" content="#ffffff">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>Smart Attendance | Market Beating UX</title>
+
+    <!-- Google Fonts: Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- FontAwesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Tailwind CSS (CDN config for single file) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Inter', 'sans-serif'] },
+                    colors: {
+                        apple: { light: '#f5f5f7', dark: '#000000' },
+                        glass: {
+                            light: 'rgba(255, 255, 255, 0.7)',
+                            dark: 'rgba(30, 30, 30, 0.7)'
+                        }
+                    },
+                    boxShadow: {
+                        'apple': '0 4px 24px rgba(0,0,0,0.06)',
+                        'apple-dark': '0 4px 24px rgba(0,0,0,0.5)'
+                    }
+                }
+            }
+        }
+    </script>
+
+    <!-- Chart.js & SweetAlert2 -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+    <style>
+        /* CSS Reset & Smooth behaviors */
+        html { scroll-behavior: smooth; }
+        body { 
+            font-family: 'Inter', sans-serif; 
+            /* Apple-esque abstract gradient background */
+            background: linear-gradient(135deg, #e0c3fc 0%, #8ec5fc 100%);
+            background-attachment: fixed;
+            min-height: 100vh;
+            transition: background 0.5s ease;
+        }
+        .dark body { background: linear-gradient(135deg, #0f2027 0%, #203a43 50%, #2c5364 100%); }
+
+        /* Glassmorphism Utilities */
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.6);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+        .dark .glass-panel {
+            background: rgba(15, 15, 15, 0.6);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        /* Micro-interactions */
+        .btn-hover { transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+        .btn-hover:hover { transform: translateY(-2px); box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); }
+        .btn-hover:active { transform: translateY(1px); }
+        
+        .row-interact { transition: all 0.3s ease; cursor: pointer; }
+        .row-interact:hover { background: rgba(255,255,255,0.8); transform: scale(1.01); }
+        .dark .row-interact:hover { background: rgba(255,255,255,0.1); }
+
+        /* Status Colors */
+        .status-present { background-color: #d1fae5; color: #065f46; border: 1px solid #34d399; }
+        .status-absent { background-color: #fee2e2; color: #991b1b; border: 1px solid #f87171; }
+        .status-late { background-color: #fef3c7; color: #92400e; border: 1px solid #fbbf24; }
+        .status-excused { background-color: #dbeafe; color: #1e40af; border: 1px solid #60a5fa; }
+        .dark .status-present { background-color: rgba(6,95,70,0.5); color: #34d399; }
+        .dark .status-absent { background-color: rgba(153,27,27,0.5); color: #f87171; }
+        .dark .status-late { background-color: rgba(146,64,14,0.5); color: #fbbf24; }
+        .dark .status-excused { background-color: rgba(30,64,175,0.5); color: #60a5fa; }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.2); border-radius: 10px; }
+        .dark ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); }
+        
+        /* Danger highlight */
+        .danger-glow { box-shadow: 0 0 15px rgba(239, 68, 68, 0.5); border-left: 4px solid #ef4444 !important; }
+    </style>
+</head>
+<body class="text-gray-800 dark:text-gray-100 p-4 md:p-8">
+
+    <div class="max-w-7xl mx-auto space-y-6">
+        
+        <!-- HEADER -->
+        <header class="glass-panel rounded-3xl p-6 shadow-apple dark:shadow-apple-dark flex flex-col md:flex-row justify-between items-center gap-4">
+            <div class="flex items-center gap-4">
+                <div class="w-12 h-12 rounded-full bg-gradient-to-tr from-blue-500 to-purple-500 text-white flex items-center justify-center text-xl shadow-lg">
+                    <i class="fa-solid fa-graduation-cap"></i>
+                </div>
+                <div>
+                    <h1 class="text-2xl font-bold tracking-tight">Smart Attendance</h1>
+                    <p id="realtime-clock" class="text-sm opacity-70 font-mono mt-1">Đang tải thời gian...</p>
+                </div>
+            </div>
+            
+            <div class="flex flex-wrap items-center gap-3">
+                <input type="date" id="date-picker" class="glass-panel px-4 py-2 rounded-xl outline-none focus:ring-2 ring-blue-400 btn-hover dark:bg-gray-800 dark:text-white cursor-pointer">
+                
+                <button onclick="markAllPresent()" class="btn-hover bg-black dark:bg-white dark:text-black text-white px-5 py-2 rounded-xl font-medium flex items-center gap-2 shadow-lg">
+                    <i class="fa-solid fa-check-double"></i> <span class="hidden md:inline">Có mặt tất cả</span>
+                </button>
+                
+                <button onclick="toggleDarkMode()" class="btn-hover glass-panel w-10 h-10 rounded-xl flex items-center justify-center text-lg">
+                    <i id="theme-icon" class="fa-solid fa-moon"></i>
+                </button>
+            </div>
+        </header>
+
+        <!-- DASHBOARD (Charts) -->
+        <section class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <!-- Pie Chart -->
+            <div class="glass-panel rounded-3xl p-6 shadow-apple dark:shadow-apple-dark col-span-1">
+                <h3 class="text-lg font-semibold mb-4 flex items-center gap-2"><i class="fa-solid fa-chart-pie text-blue-500"></i> Tổng quan hôm nay</h3>
+                <div class="relative h-48 w-full flex justify-center">
+                    <canvas id="todayPieChart"></canvas>
+                </div>
+            </div>
+            <!-- Bar Chart -->
+            <div class="glass-panel rounded-3xl p-6 shadow-apple dark:shadow-apple-dark col-span-1 md:col-span-2">
+                <h3 class="text-lg font-semibold mb-4 flex items-center gap-2"><i class="fa-solid fa-chart-line text-purple-500"></i> Vắng mặt 7 ngày qua</h3>
+                <div class="relative h-48 w-full">
+                    <canvas id="weeklyBarChart"></canvas>
+                </div>
+            </div>
+        </section>
+
+        <!-- TOOLS & ACTIONS -->
+        <section class="glass-panel rounded-3xl p-4 shadow-apple dark:shadow-apple-dark flex flex-wrap gap-4 items-center justify-between">
+            <div class="flex gap-2">
+                <button onclick="showAddStudentModal()" class="btn-hover bg-blue-500 text-white px-4 py-2 rounded-xl text-sm font-medium">
+                    <i class="fa-solid fa-user-plus mr-1"></i> Thêm HS
+                </button>
+                <button onclick="document.getElementById('csvUpload').click()" class="btn-hover glass-panel px-4 py-2 rounded-xl text-sm font-medium">
+                    <i class="fa-solid fa-file-import mr-1"></i> Nhập CSV
+                </button>
+                <input type="file" id="csvUpload" accept=".csv" class="hidden" onchange="importCSV(event)">
+                <button onclick="exportCSV()" class="btn-hover glass-panel px-4 py-2 rounded-xl text-sm font-medium">
+                    <i class="fa-solid fa-file-export mr-1"></i> Xuất CSV
+                </button>
+            </div>
+            
+            <div class="relative">
+                <i class="fa-solid fa-search absolute left-3 top-3 opacity-50"></i>
+                <input type="text" id="searchInput" onkeyup="renderStudentList()" placeholder="Tìm kiếm học sinh..." class="glass-panel pl-10 pr-4 py-2 rounded-xl outline-none focus:ring-2 ring-blue-400 w-full md:w-64">
+            </div>
+        </section>
+
+        <!-- DATA GRID / LIST -->
+        <section class="glass-panel rounded-3xl p-1 shadow-apple dark:shadow-apple-dark overflow-hidden">
+            <!-- Table Header (Hidden on Mobile) -->
+            <div class="hidden md:grid grid-cols-12 gap-4 p-4 font-semibold opacity-70 border-b border-gray-200 dark:border-gray-700">
+                <div class="col-span-2">Mã HS</div>
+                <div class="col-span-3">Họ và Tên</div>
+                <div class="col-span-3 text-center">Trạng Thái (Tap để đổi)</div>
+                <div class="col-span-2 text-center">Tổng Vắng</div>
+                <div class="col-span-2 text-right">Hành động</div>
+            </div>
+            
+            <!-- List Container -->
+            <div id="student-list" class="max-h-[500px] overflow-y-auto p-2 space-y-2">
+                <!-- Rows will be injected by JS -->
+            </div>
+        </section>
+        
+    </div>
+
+    <!-- CORE JAVASCRIPT LOGIC -->
+    <script>
+        // --- 1. STATE MANAGEMENT ---
+        const STATES = ['Present', 'Absent', 'Late', 'Excused'];
+        const STATE_LABELS = { 'Present': 'Có mặt', 'Absent': 'Vắng mặt', 'Late': 'Đi trễ', 'Excused': 'Có phép' };
+        const STATE_CLASSES = {
+            'Present': 'status-present',
+            'Absent': 'status-absent',
+            'Late': 'status-late',
+            'Excused': 'status-excused'
+        };
+
+        let students = JSON.parse(localStorage.getItem('ams_students')) || [
+            { id: 'HS001', name: 'Nguyễn Lê Anh Khoa' },
+            { id: 'HS002', name: 'Trần Thị Bích' },
+            { id: 'HS003', name: 'Lê Văn Cường' }
+        ];
+        
+        // attendanceData format: { "2026-10-12": { "HS001": "Present", "HS002": "Absent" } }
+        let attendanceData = JSON.parse(localStorage.getItem('ams_attendance')) || {};
+        let currentDate = new Date().toISOString().split('T')[0];
+        
+        let pieChartInstance = null;
+        let barChartInstance = null;
+
+        // --- 2. INITIALIZATION ---
+        document.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('date-picker').value = currentDate;
+            document.getElementById('date-picker').addEventListener('change', (e) => {
+                currentDate = e.target.value;
+                refreshUI();
+            });
+            
+            checkTheme();
+            startClock();
+            refreshUI();
+        });
+
+        function saveData() {
+            localStorage.setItem('ams_students', JSON.stringify(students));
+            localStorage.setItem('ams_attendance', JSON.stringify(attendanceData));
+        }
+
+        function refreshUI() {
+            renderStudentList();
+            updateDashboard();
+        }
+
+        // --- 3. UI RENDERING (Apple-esque Data Grid) ---
+        function renderStudentList() {
+            const listEl = document.getElementById('student-list');
+            const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+            listEl.innerHTML = '';
+
+            // Ensure today exists in data
+            if (!attendanceData[currentDate]) attendanceData[currentDate] = {};
+
+            const filteredStudents = students.filter(s => s.name.toLowerCase().includes(searchTerm) || s.id.toLowerCase().includes(searchTerm));
+
+            if(filteredStudents.length === 0) {
+                listEl.innerHTML = `<div class="p-8 text-center opacity-50">Không tìm thấy học sinh nào.</div>`;
+                return;
+            }
+
+            filteredStudents.forEach(student => {
+                // Determine status
+                let currentStatus = attendanceData[currentDate][student.id] || 'Present';
+                if(!attendanceData[currentDate][student.id]) {
+                    attendanceData[currentDate][student.id] = 'Present'; // default save
+                }
+                
+                // Compute total absences dynamically
+                let totalAbsences = countAbsences(student.id);
+                let isDanger = totalAbsences >= 3;
+
+                // Build Row (Responsive: Card on Mobile, Grid on PC)
+                const row = document.createElement('div');
+                row.className = `row-interact glass-panel rounded-2xl p-4 md:px-4 md:py-3 mb-2 flex flex-col md:grid md:grid-cols-12 md:items-center gap-3 md:gap-4 ${isDanger ? 'danger-glow' : ''}`;
+                
+                row.innerHTML = `
+                    <!-- Mobile View Labels (Hidden on PC) & Data -->
+                    <div class="col-span-2 font-mono text-sm opacity-70 flex justify-between md:block">
+                        <span class="md:hidden font-semibold">Mã HS: </span>${student.id}
+                    </div>
+                    
+                    <div class="col-span-3 font-semibold text-lg md:text-base flex justify-between md:block">
+                        ${student.name}
+                        ${isDanger ? '<i class="fa-solid fa-triangle-exclamation text-red-500 md:hidden ml-2"></i>' : ''}
+                    </div>
+                    
+                    <!-- 1-Tap Attendance Toggle -->
+                    <div class="col-span-3 flex justify-center w-full">
+                        <button onclick="cycleStatus('${student.id}')" class="w-full md:w-auto px-4 py-2 rounded-xl text-sm font-semibold btn-hover shadow-sm ${STATE_CLASSES[currentStatus]}">
+                            ${STATE_LABELS[currentStatus]}
+                        </button>
+                    </div>
+                    
+                    <div class="col-span-2 text-center text-sm flex justify-between md:block items-center">
+                        <span class="md:hidden opacity-70">Tổng vắng:</span>
+                        <span class="${isDanger ? 'text-red-500 font-bold' : ''}">${totalAbsences} buổi</span>
+                    </div>
+                    
+                    <!-- Actions -->
+                    <div class="col-span-2 flex justify-end gap-2 mt-2 md:mt-0">
+                        <button onclick="generateQR('${student.id}', '${student.name}')" class="btn-hover w-10 h-10 rounded-xl bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 flex items-center justify-center" title="Mã QR">
+                            <i class="fa-solid fa-qrcode"></i>
+                        </button>
+                        <button onclick="deleteStudent('${student.id}')" class="btn-hover w-10 h-10 rounded-xl bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 flex items-center justify-center" title="Xóa">
+                            <i class="fa-solid fa-trash"></i>
+                        </button>
+                    </div>
+                `;
+                listEl.appendChild(row);
+            });
+            saveData();
+        }
+
+        // --- 4. CORE LOGIC (Smart Toggles & Helpers) ---
+        function cycleStatus(studentId) {
+            let current = attendanceData[currentDate][studentId];
+            let nextIndex = (STATES.indexOf(current) + 1) % STATES.length;
+            attendanceData[currentDate][studentId] = STATES[nextIndex];
+            refreshUI();
+            
+            // Haptic feedback API (for supported devices)
+            if (navigator.vibrate) navigator.vibrate(50);
+        }
+
+        function markAllPresent() {
+            Swal.fire({
+                title: 'Xác nhận',
+                text: "Đánh dấu tất cả học sinh là 'Có mặt' trong ngày này?",
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonColor: '#34d399',
+                cancelButtonColor: '#d33',
+                confirmButtonText: 'Đồng ý',
+                cancelButtonText: 'Hủy',
+                background: document.documentElement.classList.contains('dark') ? '#1f2937' : '#fff',
+                color: document.documentElement.classList.contains('dark') ? '#fff' : '#374151'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    students.forEach(s => {
+                        attendanceData[currentDate][s.id] = 'Present';
+                    });
+                    refreshUI();
+                    Toast.fire({ icon: 'success', title: 'Đã đánh dấu tất cả có mặt' });
+                }
+            });
+        }
+
+        function countAbsences(studentId) {
+            let count = 0;
+            for (let date in attendanceData) {
+                if (attendanceData[date][studentId] === 'Absent') count++;
+            }
+            return count;
+        }
+
+        // --- 5. CHARTS & DASHBOARD (Chart.js) ---
+        function updateDashboard() {
+            const chartColors = document.documentElement.classList.contains('dark') ? '#fff' : '#333';
+            
+            // 1. Pie Chart Logic (Today)
+            let stats = { 'Present': 0, 'Absent': 0, 'Late': 0, 'Excused': 0 };
+            let todayData = attendanceData[currentDate] || {};
+            students.forEach(s => {
+                let st = todayData[s.id] || 'Present';
+                stats[st]++;
+            });
+
+            const pieCtx = document.getElementById('todayPieChart').getContext('2d');
+            if(pieChartInstance) pieChartInstance.destroy();
+            pieChartInstance = new Chart(pieCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Có mặt', 'Vắng mặt', 'Đi trễ', 'Có phép'],
+                    datasets: [{
+                        data: [stats.Present, stats.Absent, stats.Late, stats.Excused],
+                        backgroundColor: ['#34d399', '#f87171', '#fbbf24', '#60a5fa'],
+                        borderWidth: 0,
+                        hoverOffset: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { 
+                        legend: { position: 'right', labels: { color: chartColors, font: { family: 'Inter' } } }
+                    },
+                    cutout: '70%'
+                }
+            });
+
+            // 2. Bar Chart Logic (Last 7 Days Absences)
+            let last7Days = [];
+            let absenceCounts = [];
+            let tempDate = new Date(currentDate);
+            
+            for(let i=6; i>=0; i--) {
+                let d = new Date(tempDate);
+                d.setDate(d.getDate() - i);
+                let dStr = d.toISOString().split('T')[0];
+                last7Days.push(d.toLocaleDateString('vi-VN', { month: 'numeric', day: 'numeric' }));
+                
+                let aCount = 0;
+                if(attendanceData[dStr]) {
+                    Object.values(attendanceData[dStr]).forEach(status => {
+                        if(status === 'Absent') aCount++;
+                    });
+                }
+                absenceCounts.push(aCount);
+            }
+
+            const barCtx = document.getElementById('weeklyBarChart').getContext('2d');
+            if(barChartInstance) barChartInstance.destroy();
+            barChartInstance = new Chart(barCtx, {
+                type: 'bar',
+                data: {
+                    labels: last7Days,
+                    datasets: [{
+                        label: 'Số hs vắng',
+                        data: absenceCounts,
+                        backgroundColor: 'rgba(248, 113, 113, 0.8)',
+                        borderRadius: 6
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: { beginAtZero: true, ticks: { stepSize: 1, color: chartColors }, grid: { color: 'rgba(150,150,150,0.1)' } },
+                        x: { ticks: { color: chartColors }, grid: { display: false } }
+                    },
+                    plugins: { legend: { display: false } }
+                }
+            });
+        }
+
+        // --- 6. STUDENT MANAGEMENT (CRUD) ---
+        function showAddStudentModal() {
+            Swal.fire({
+                title: 'Thêm Học Sinh Mới',
+                html: `
+                    <input id="swal-id" class="swal2-input !w-[80%] rounded-xl" placeholder="Mã HS (VD: HS004)">
+                    <input id="swal-name" class="swal2-input !w-[80%] rounded-xl" placeholder="Họ và Tên">
+                `,
+                focusConfirm: false,
+                showCancelButton: true,
+                confirmButtonText: 'Thêm',
+                confirmButtonColor: '#3b82f6',
+                background: document.documentElement.classList.contains('dark') ? '#1f2937' : '#fff',
+                color: document.documentElement.classList.contains('dark') ? '#fff' : '#374151',
+                preConfirm: () => {
+                    const id = document.getElementById('swal-id').value.trim();
+                    const name = document.getElementById('swal-name').value.trim();
+                    if (!id || !name) Swal.showValidationMessage('Vui lòng nhập đủ thông tin!');
+                    if (students.find(s => s.id === id)) Swal.showValidationMessage('Mã HS đã tồn tại!');
+                    return { id, name }
+                }
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    students.push(result.value);
+                    refreshUI();
+                    Toast.fire({ icon: 'success', title: 'Đã thêm học sinh' });
+                }
+            });
+        }
+
+        function deleteStudent(id) {
+            Swal.fire({
+                title: 'Chắc chắn xóa?',
+                text: "Mọi dữ liệu điểm danh của HS này sẽ bị mất!",
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#ef4444',
+                cancelButtonColor: '#9ca3af',
+                confirmButtonText: 'Xóa ngay',
+                background: document.documentElement.classList.contains('dark') ? '#1f2937' : '#fff',
+                color: document.documentElement.classList.contains('dark') ? '#fff' : '#374151'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    students = students.filter(s => s.id !== id);
+                    // Cleanup attendance memory
+                    for(let date in attendanceData) { delete attendanceData[date][id]; }
+                    refreshUI();
+                    Toast.fire({ icon: 'success', title: 'Đã xóa thành công' });
+                }
+            });
+        }
+
+        // --- 7. EXPORT / IMPORT CSV ---
+        function exportCSV() {
+            // BOM for UTF-8 Excel support
+            let csvContent = "\uFEFFMã HS,Họ và Tên,Trạng Thái (" + currentDate + "),Tổng Vắng\n";
+            
+            students.forEach(s => {
+                let statusRaw = attendanceData[currentDate][s.id] || 'Present';
+                let statusVN = STATE_LABELS[statusRaw];
+                let absentTotal = countAbsences(s.id);
+                csvContent += `${s.id},"${s.name}",${statusVN},${absentTotal}\n`;
+            });
+
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement("a");
+            const url = URL.createObjectURL(blob);
+            link.setAttribute("href", url);
+            link.setAttribute("download", `DiemDanh_${currentDate}.csv`);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            Toast.fire({ icon: 'success', title: 'Đã xuất file CSV' });
+        }
+
+        function importCSV(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const text = e.target.result;
+                const rows = text.split('\n');
+                let count = 0;
+                // Bỏ qua header (i=1)
+                for(let i=1; i<rows.length; i++) {
+                    const cols = rows[i].split(',');
+                    if(cols.length >= 2) {
+                        const id = cols[0].trim();
+                        // Handle quotes in name if present
+                        const name = cols[1].replace(/"/g, '').trim(); 
+                        if(id && name && !students.find(s => s.id === id)) {
+                            students.push({ id, name });
+                            count++;
+                        }
+                    }
+                }
+                document.getElementById('csvUpload').value = ''; // reset input
+                refreshUI();
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Hoàn tất',
+                    text: `Đã nhập thành công ${count} học sinh mới.`,
+                    background: document.documentElement.classList.contains('dark') ? '#1f2937' : '#fff',
+                    color: document.documentElement.classList.contains('dark') ? '#fff' : '#374151'
+                });
+            };
+            reader.readAsText(file);
+        }
+
+        // --- 8. UTILITIES (Clock, Theme, QR) ---
+        function startClock() {
+            const clockEl = document.getElementById('realtime-clock');
+            setInterval(() => {
+                const now = new Date();
+                const timeStr = now.toLocaleTimeString('vi-VN', { hour12: false });
+                const dateStr = now.toLocaleDateString('vi-VN', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' });
+                clockEl.textContent = `${timeStr} - ${dateStr}`;
+            }, 1000);
+        }
+
+        function toggleDarkMode() {
+            document.documentElement.classList.toggle('dark');
+            const isDark = document.documentElement.classList.contains('dark');
+            localStorage.setItem('ams_theme', isDark ? 'dark' : 'light');
+            document.getElementById('theme-icon').className = isDark ? 'fa-solid fa-sun text-yellow-400' : 'fa-solid fa-moon text-gray-700';
+            updateDashboard(); // Re-render charts for correct colors
+        }
+
+        function checkTheme() {
+            const savedTheme = localStorage.getItem('ams_theme');
+            const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            
+            if (savedTheme === 'dark' || (!savedTheme && systemDark)) {
+                document.documentElement.classList.add('dark');
+                document.getElementById('theme-icon').className = 'fa-solid fa-sun text-yellow-400';
+            }
+        }
+
+        // SweetAlert2 Toast configuration for elegant micro-notifications
+        const Toast = Swal.mixin({
+            toast: true,
+            position: 'bottom-end',
+            showConfirmButton: false,
+            timer: 2000,
+            timerProgressBar: true,
+            background: document.documentElement.classList.contains('dark') ? '#374151' : '#fff',
+            color: document.documentElement.classList.contains('dark') ? '#fff' : '#000',
+            didOpen: (toast) => {
+                toast.addEventListener('mouseenter', Swal.stopTimer)
+                toast.addEventListener('mouseleave', Swal.resumeTimer)
+            }
+        });
+
+        function generateQR(id, name) {
+            Swal.fire({
+                title: 'Mã QR Học Sinh',
+                html: `
+                    <div class="p-4 bg-white rounded-2xl inline-block shadow-lg border border-gray-100">
+                        <!-- Simulation of QR Code using FontAwesome -->
+                        <i class="fa-solid fa-qrcode text-[150px] text-gray-900"></i>
+                    </div>
+                    <h3 class="mt-4 font-bold text-lg">${name}</h3>
+                    <p class="font-mono text-gray-500">${id}</p>
+                `,
+                showConfirmButton: false,
+                showCloseButton: true,
+                background: document.documentElement.classList.contains('dark') ? '#1f2937' : '#fff',
+                color: document.documentElement.classList.contains('dark') ? '#fff' : '#374151'
+            });
+        }
+    </script>
+</body>
+</html>
